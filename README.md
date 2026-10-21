@@ -17,6 +17,12 @@ Công cụ chạy trên máy bạn, mở Microsoft Edge để bạn đăng nhậ
 
 Mỗi lượt tối đa 5.000 trang, mỗi trang tối đa 20 lượt kiểm tra/cuộn, chờ ít nhất 2 giây giữa các trang và giữa các lượt tải. Các trang chạm giới hạn cuộn được ghi trong `crawl.json`. Công cụ chỉ mở liên kết thuộc nhóm đường dẫn học tập đã nhận diện, không tự bấm nút xóa, mua hay đánh dấu hoàn thành. Bản thân website vẫn có thể ghi nhận việc truy cập bài học. Lỗi đăng nhập/403/429 sẽ dừng, không tự vượt hạn chế.
 
+## Nếu không đăng nhập được
+
+Edge tự mở là hoạt động bình thường. Đây là hồ sơ riêng, không có sẵn tài khoản/cookie từ Edge thường; hãy đăng nhập trong cửa sổ do công cụ mở và chỉ nhập `auto` sau khi vào dashboard thành công. Trong lúc chờ lệnh, công cụ vẫn xử lý sự kiện trình duyệt để hỗ trợ cửa sổ và sự kiện đăng nhập.
+
+Nếu thất bại, thử đăng nhập bằng Edge bình thường để so sánh. Ghi lại thông báo chính xác và cách đăng nhập (email/mật khẩu hay qua nhà cung cấp khác); không gửi mật khẩu/cookie. Nếu trang báo CAPTCHA hoặc từ chối trình duyệt tự động, xử lý qua luồng chính thức của website hoặc hỗ trợ JapanesePod101; công cụ không vượt cơ chế này. Việc sửa xử lý sự kiện chưa chứng minh sẽ giải quyết lỗi đăng nhập cụ thể của bạn.
+
 ## Lấy cấu trúc trang để hoàn thiện chế độ tự động
 
 1. Dùng bản công cụ mới này và đăng nhập trong Microsoft Edge do công cụ mở.

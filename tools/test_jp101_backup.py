@@ -7,6 +7,25 @@ import jp101_backup as backup
 
 
 class BackupTests(unittest.TestCase):
+    def test_terminal_wait_keeps_browser_events_running(self):
+        import threading
+        from types import SimpleNamespace
+        pumped = threading.Event()
+        page = SimpleNamespace(is_closed=lambda: False,
+                               wait_for_timeout=lambda _: pumped.set())
+        def reply(prompt):
+            if not pumped.wait(2):
+                raise AssertionError("Browser events were blocked while waiting for input")
+            return "auto"
+        with patch("builtins.input", side_effect=reply):
+            self.assertEqual(backup.browser_input(SimpleNamespace(pages=[page]), "> "), "auto")
+
+    def test_terminal_eof_propagates(self):
+        from types import SimpleNamespace
+        with patch("builtins.input", side_effect=EOFError):
+            with self.assertRaises(EOFError):
+                backup.browser_input(SimpleNamespace(pages=[]), "> ")
+
     def test_learning_navigation_excludes_actions_and_normalizes(self):
         self.assertEqual(backup.learning_url("https://www.japanesepod101.com/lesson/example?page=2&utm_source=email#top"),
                          "https://www.japanesepod101.com/lesson/example?page=2")

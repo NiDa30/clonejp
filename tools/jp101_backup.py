@@ -3,12 +3,44 @@ import hashlib
 import json
 import re
 import time
+import queue
+import threading
 from collections import deque
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1] / ".jp101-local"
 MEDIA = {".mp3", ".m4a", ".mp4", ".pdf", ".zip", ".csv", ".tsv", ".xlsx"}
+
+
+def browser_input(context, prompt):
+    """Keep Playwright processing browser events while the terminal awaits input."""
+    results = queue.Queue()
+
+    def read():
+        try:
+            results.put((input(prompt), None))
+        except Exception as exc:
+            results.put((None, exc))
+
+    threading.Thread(target=read, daemon=True).start()
+    while True:
+        try:
+            value, error = results.get_nowait()
+            if error:
+                raise error
+            return value
+        except queue.Empty:
+            pages = [page for page in context.pages if not page.is_closed()]
+            if pages:
+                page = pages[0]
+                try:
+                    page.wait_for_timeout(100)
+                except Exception:
+                    if not page.is_closed():
+                        raise
+            else:
+                time.sleep(0.1)
 
 
 def learning_url(url):
@@ -316,6 +348,8 @@ def main():
         "pages": {}, "downloads": {}
     }
     print("Dang nhap truc tiep trong cua so Microsoft Edge. Khong nhap mat khau vao terminal.")
+    print("Day la ho so Edge rieng: ban can dang nhap lai, du da dang nhap trong Edge thuong.")
+    print("Neu dang nhap loi, dung lai va ghi thong bao loi. Chua nhap auto khi chua dang nhap xong.")
     print("Mo trang bai hoc/tu vung/tien do, mo muc Download va cuon tai het du lieu can luu.")
     print("Lenh: auto = tu dong quet va tai; scan = luu mot tab; structure = xuat cau truc; download = tai tep; quit = thoat.")
     with sync_playwright() as p:
@@ -327,7 +361,7 @@ def main():
             page = context.pages[0] if context.pages else context.new_page()
             page.goto("https://www.japanesepod101.com/dashboard", wait_until="domcontentloaded")
             while True:
-                command = input("auto / scan / structure / download / quit > ").strip().lower()
+                command = browser_input(context, "auto / scan / structure / download / quit > ").strip().lower()
                 if command == "quit":
                     break
                 if command == "auto":
@@ -341,7 +375,7 @@ def main():
                         continue
                     for index, tab in enumerate(pages, 1):
                         print(f"{index}: {tab.title()}")
-                    selection = input("So tab can luu [1]: ").strip() or "1"
+                    selection = browser_input(context, "So tab can luu [1]: ").strip() or "1"
                     if selection.isdigit() and 1 <= int(selection) <= len(pages):
                         selected = pages[int(selection) - 1]
                         if command == "structure":
