@@ -315,12 +315,12 @@ def main():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {
         "pages": {}, "downloads": {}
     }
-    print("Dang nhap truc tiep trong cua so Chromium. Khong nhap mat khau vao terminal.")
+    print("Dang nhap truc tiep trong cua so Microsoft Edge. Khong nhap mat khau vao terminal.")
     print("Mo trang bai hoc/tu vung/tien do, mo muc Download va cuon tai het du lieu can luu.")
     print("Lenh: auto = tu dong quet va tai; scan = luu mot tab; structure = xuat cau truc; download = tai tep; quit = thoat.")
     with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
-            str(ROOT / "browser-profile"), headless=False, accept_downloads=True,
+            str(ROOT / "edge-profile"), channel="msedge", headless=False, accept_downloads=True,
             downloads_path=str(ROOT / "downloads"),
         )
         try:

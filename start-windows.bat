@@ -13,8 +13,6 @@ if not exist .venv\Scripts\python.exe (
 )
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 if errorlevel 1 goto :failed
-.venv\Scripts\python.exe -m playwright install chromium
-if errorlevel 1 goto :failed
 .venv\Scripts\python.exe tools\jp101_backup.py
 if errorlevel 1 goto :failed
 pause

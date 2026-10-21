@@ -1,6 +1,6 @@
 # Sao lưu JapanesePod101 trên Windows 11
 
-Công cụ chạy trên máy bạn, mở Chromium để bạn đăng nhập trực tiếp. Chế độ `auto` tự lần theo liên kết học tập tìm được, cuộn trang, lưu chữ/bảng và tải tài liệu có liên kết tải xuống. Có thể tiếp tục hàng đợi khi chạy lại. Chỉ tải nội dung được tài khoản cho phép tải.
+Công cụ chạy trên máy bạn, mở Microsoft Edge để bạn đăng nhập trực tiếp. Chế độ `auto` tự lần theo liên kết học tập tìm được, cuộn trang, lưu chữ/bảng và tải tài liệu có liên kết tải xuống. Có thể tiếp tục hàng đợi khi chạy lại. Chỉ tải nội dung được tài khoản cho phép tải.
 
 **Chưa thể bảo đảm sao lưu toàn bộ tài khoản.** Giao diện sau đăng nhập chưa được kiểm chứng. Công cụ không gọi API nội bộ, không lấy media từ luồng phát và không vượt DRM. Phân trang có liên kết HTML được lần theo; nút JavaScript, dữ liệu ẩn hoặc chức năng xuất riêng cần điều chỉnh sau khi kiểm tra cấu trúc trang. Nội dung chữ và bảng là bản chụp để đọc, không phải bản xuất có thể nhập lại tiến độ hoặc flashcard.
 
@@ -8,8 +8,8 @@ Công cụ chạy trên máy bạn, mở Chromium để bạn đăng nhập tr�
 
 1. Cài Python 3.11 trở lên từ https://www.python.org/downloads/windows/.
 2. Tải repository thành ZIP và giải nén vào một thư mục riêng.
-3. Nhấp đúp `start-windows.bat`. Lần đầu cần Internet để cài Playwright và Chromium.
-4. Đăng nhập JapanesePod101 trong cửa sổ Chromium vừa mở. Mật khẩu không nhập vào terminal.
+3. Đảm bảo Microsoft Edge đã được cài trên Windows, rồi nhấp đúp `start-windows.bat`. Lần đầu cần Internet để cài thư viện Playwright; không tải Chromium. Nếu Edge chưa có, cài từ https://www.microsoft.com/edge rồi chạy lại.
+4. Đăng nhập JapanesePod101 trong cửa sổ Microsoft Edge vừa mở. Công cụ dùng hồ sơ Edge riêng trong `.jp101-local/edge-profile`, không dùng phiên đăng nhập Edge cá nhân sẵn có hoặc hồ sơ Chromium của bản cũ. Mật khẩu không nhập vào terminal.
 5. Đợi đăng nhập xong. Có thể mở thêm tab từ vựng, flashcard, tiến độ trong cùng trình duyệt để làm điểm bắt đầu.
 6. Quay lại terminal, nhập `auto`. Công cụ tự duyệt các đường dẫn học tập nhận diện được và tải file khi quét xong. Không cần mở từng bài.
 7. Xem `coverage.json`: số trang đã lưu, số liên kết còn chờ, nguyên nhân dừng và giới hạn. Hết hàng đợi chỉ có nghĩa đã duyệt các liên kết nhận diện được, không chứng minh đã sao lưu cả tài khoản.
@@ -19,7 +19,7 @@ Mỗi lượt tối đa 5.000 trang, mỗi trang tối đa 20 lượt kiểm tra
 
 ## Lấy cấu trúc trang để hoàn thiện chế độ tự động
 
-1. Dùng bản công cụ mới này và đăng nhập trong Chromium.
+1. Dùng bản công cụ mới này và đăng nhập trong Microsoft Edge do công cụ mở.
 2. Mở dashboard. Trong terminal nhập `structure`, rồi chọn số tab tương ứng.
 3. Làm tương tự với danh sách bài học, một bài học có phần Download đang mở, trang flashcard/từ vựng và trang tiến độ. Nếu có phân trang hoặc Load More, để nút đó xuất hiện.
 4. Các tệp nằm trong `.jp101-local/structures/structure-....json`.
@@ -39,9 +39,9 @@ Tất cả nằm trong `.jp101-local` cạnh script:
 - `crawl.json`: hàng đợi và trạng thái duyệt để tiếp tục.
 - `coverage.json`: báo cáo phạm vi đã quét, không phải chứng nhận sao lưu đầy đủ.
 - `structures/`: cấu trúc đã lược bỏ dữ liệu tài khoản, dành cho chẩn đoán.
-- `browser-profile/`: phiên đăng nhập riêng của công cụ.
+- `edge-profile/`: phiên đăng nhập Edge riêng của công cụ. `browser-profile/` nếu có là phiên Chromium của bản cũ.
 
-Không chia sẻ `.jp101-local`: thư mục chứa phiên đăng nhập, dữ liệu cá nhân và có thể có liên kết tạm thời cấp quyền tải. Thư mục này đã được loại khỏi Git. Sau khi dùng xong, đóng công cụ rồi xóa `browser-profile` nếu không muốn giữ phiên đăng nhập.
+Không chia sẻ `.jp101-local`: thư mục chứa phiên đăng nhập, dữ liệu cá nhân và có thể có liên kết tạm thời cấp quyền tải. Thư mục này đã được loại khỏi Git. Sau khi dùng xong, đóng công cụ rồi xóa `edge-profile` (và `browser-profile` nếu còn từ bản cũ) nếu không muốn giữ phiên đăng nhập.
 
 Tệp lớn được tải lần lượt vào bộ nhớ trước khi ghi xuống đĩa. Lỗi 401, 403 hoặc 429 sẽ dừng lượt tải để bạn kiểm tra đăng nhập/quyền tải hoặc chờ; không tự vượt giới hạn. Liên kết hết hạn cần quét lại trang. Không bảo đảm mọi file audio/video đều có liên kết tải trực tiếp.
 
