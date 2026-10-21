@@ -105,9 +105,10 @@ class BackupTests(unittest.TestCase):
                     "https://www.japanesepod101.com/lesson/a?action=delete", "https://other.test/lesson/a"]:
             self.assertIsNone(backup.learning_url(url))
 
-    def test_auto_discovers_pages_and_resumes_without_visiting_again(self):
+    def test_auto_refreshes_entry_pages_but_resumes_completed_lessons(self):
         from types import SimpleNamespace
         dashboard = "https://www.japanesepod101.com/dashboard"
+        library = "https://www.japanesepod101.com/lesson-library"
         lesson = "https://www.japanesepod101.com/lesson/example"
         class Page:
             url = dashboard
@@ -131,10 +132,26 @@ class BackupTests(unittest.TestCase):
                 patch.object(backup, "download_all") as downloads, patch.object(backup.time, "sleep"):
             manifest = {"pages": {}, "downloads": {}}
             backup.auto_backup(context, manifest)
-            self.assertEqual(page.visits, [dashboard, lesson])
+            self.assertEqual(page.visits, [dashboard, library, lesson])
             backup.auto_backup(context, manifest)
-            self.assertEqual(page.visits, [dashboard, lesson])
+            self.assertEqual(page.visits, [dashboard, library, lesson, dashboard, library])
             self.assertEqual(downloads.call_count, 2)
+
+    def test_coverage_distinguishes_pages_download_links_and_files(self):
+        import json
+        with tempfile.TemporaryDirectory() as directory, patch.object(backup, "ROOT", Path(directory)):
+            root = Path(directory)
+            (root / "saved.mp3").write_bytes(b"example")
+            manifest = {"pages": {"https://www.japanesepod101.com/dashboard": {}},
+                        "downloads": {"one": {"file": "saved.mp3"}, "two": {"error": "HTTP_403"}}}
+            backup.update_coverage(manifest)
+            report = json.loads((root / "coverage.json").read_text())
+            self.assertEqual(report["saved_lesson_pages"], 0)
+            self.assertEqual(report["download_links_found"], 2)
+            self.assertEqual(report["downloaded_files"], 1)
+            self.assertEqual(report["failed_downloads"], 1)
+            self.assertIn("discovery_warning", report)
+            self.assertNotIn("https://", (root / "coverage.json").read_text())
 
     def test_site_boundary(self):
         self.assertTrue(backup.site_url("https://www.japanesepod101.com/dashboard"))

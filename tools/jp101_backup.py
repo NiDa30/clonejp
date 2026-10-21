@@ -307,9 +307,17 @@ def auto_backup(context, manifest, max_pages=5000):
             known.add(candidate)
             queue.append(candidate)
 
-    for tab in context.pages:
-        enqueue(tab.url)
-    enqueue("https://www.japanesepod101.com/dashboard")
+    # Always refresh entry pages: an earlier visit may have happened before login
+    # or before client-side links appeared. Retain completed non-entry lessons.
+    seeds = ["https://www.japanesepod101.com/dashboard",
+             "https://www.japanesepod101.com/lesson-library"]
+    seeds.extend(tab.url for tab in context.pages)
+    for url in seeds:
+        candidate = learning_url(url)
+        if candidate in done:
+            done.remove(candidate)
+            known.discard(candidate)
+        enqueue(url)
     # Reuse links collected manually, including vocabulary/progress starting pages.
     for record in manifest["pages"].values():
         saved = ROOT / record["folder"] / "page.json"
@@ -397,6 +405,29 @@ def auto_backup(context, manifest, max_pages=5000):
         download_all(context, manifest)
     else:
         print("Chua tai tiep. Xu ly dang nhap/loi roi nhap auto de tiep tuc.")
+    update_coverage(manifest)
+
+
+def update_coverage(manifest):
+    """Shareable counts only; do not include account URLs, titles or tokens."""
+    path = ROOT / "coverage.json"
+    report = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    pages = manifest.get("pages", {})
+    items = list(manifest.get("downloads", {}).values())
+    lessons = sum(urlsplit(url).path.startswith("/lesson/") for url in pages)
+    completed = sum(bool(item.get("file") and (ROOT / item["file"]).is_file()) for item in items)
+    report.update({"saved_lesson_pages": lessons, "download_links_found": len(items),
+                   "downloaded_files": completed,
+                   "failed_downloads": sum(bool(item.get("error")) for item in items),
+                   "downloads_remaining": len(items) - completed})
+    if not lessons:
+        report["discovery_warning"] = "No lesson pages saved; library/login/link discovery requires inspection"
+    else:
+        report.pop("discovery_warning", None)
+    write_json(path, report)
+    print(f"Bai hoc da luu: {lessons}; lien ket tai: {len(items)}; tep da tai: {completed}.")
+    if not lessons:
+        print("CHUA tim thay bai hoc. Mo Lesson Library trong Edge, doi hien danh sach roi chay auto lai.")
 
 
 def download_all(context, manifest):
@@ -411,6 +442,7 @@ def download_all(context, manifest):
         try:
             response = context.request.get(url, timeout=120000)
             if response.status in (401, 403, 429):
+                item["error"] = f"HTTP_{response.status}"
                 print(f"Dung tai: HTTP {response.status}. Kiem tra quyen tai/dang nhap hoac thu lai sau.")
                 break
             if not response.ok:
@@ -443,6 +475,7 @@ def download_all(context, manifest):
                 response.dispose()
             write_json(ROOT / "manifest.json", manifest)
         time.sleep(2)
+    update_coverage(manifest)
 
 
 def main():

@@ -17,6 +17,8 @@ Công cụ chạy trên máy bạn, mở Microsoft Edge để bạn đăng nhậ
 
 Mỗi lượt tối đa 5.000 trang, mỗi trang tối đa 20 lượt kiểm tra/cuộn, chờ ít nhất 2 giây giữa các trang và giữa các lượt tải. Các trang chạm giới hạn cuộn được ghi trong `crawl.json`. Công cụ chỉ mở liên kết thuộc nhóm đường dẫn học tập đã nhận diện, không tự bấm nút xóa, mua hay đánh dấu hoàn thành. Bản thân website vẫn có thể ghi nhận việc truy cập bài học. Lỗi đăng nhập/403/429 sẽ dừng, không tự vượt hạn chế.
 
+Mỗi lượt `auto` đọc lại dashboard, Lesson Library và các trang học đang mở để tìm liên kết mới sau khi đăng nhập; các bài khác đã xử lý vẫn được giữ trong trạng thái tiếp tục. Không cần xóa `crawl.json`. Báo cáo bổ sung số trang bài học, liên kết tải, file đã tải và lỗi tải. Nếu số trang bài học bằng 0, chưa có cơ sở nói đã sao lưu bài học: mở Lesson Library trong Edge do công cụ mở, đợi danh sách xuất hiện rồi chạy `auto` lại và gửi `coverage.json` mới nếu vẫn chưa tìm thấy bài.
+
 ## Nếu không đăng nhập được
 
 Edge tự mở là hoạt động bình thường. Đây là hồ sơ riêng, không có sẵn tài khoản/cookie từ Edge thường; hãy đăng nhập trong cửa sổ do công cụ mở và chỉ nhập `auto` sau khi vào dashboard thành công. Trong lúc chờ lệnh, công cụ vẫn xử lý sự kiện trình duyệt để hỗ trợ cửa sổ và sự kiện đăng nhập.
