@@ -42,6 +42,7 @@ Nếu website có nút Export/Download tạo file bằng JavaScript, hãy dùng 
 Tất cả nằm trong `.jp101-local` cạnh script:
 
 - `pages/`: nội dung chữ, bảng và liên kết của từng trang đã quét.
+- `lessons/<khóa>/<tên-bài--mã>/`: nội dung từng bài (`content.txt`, `page.json`) và tài liệu trong `files/`. Khóa được lấy từ liên kết breadcrumb tới `/lesson-library/...`; nếu trang không cung cấp thông tin này, bài nằm trong `Chua-xac-dinh-khoa`. Chưa tự phân cấp trình độ hoặc suy đoán thứ tự bài.
 - `downloads/`: các file đã tải thành công.
 - `manifest.json`: danh sách trang, trạng thái tải và đường dẫn file. Chạy lại sẽ bỏ qua file đã tải còn tồn tại.
 - `crawl.json`: hàng đợi và trạng thái duyệt để tiếp tục.
@@ -51,8 +52,12 @@ Tất cả nằm trong `.jp101-local` cạnh script:
 
 Không chia sẻ `.jp101-local`: thư mục chứa phiên đăng nhập, dữ liệu cá nhân và có thể có liên kết tạm thời cấp quyền tải. Thư mục này đã được loại khỏi Git. Sau khi dùng xong, đóng công cụ rồi xóa `edge-profile` (và `browser-profile` nếu còn từ bản cũ) nếu không muốn giữ phiên đăng nhập.
 
+Các bài đã lưu bằng bản cũ được lập thư mục mới khi khởi động, không xóa bản gốc. Chạy `download` hoặc `auto` để đặt thêm file đã tải vào từng thư mục bài; file dùng chung có mặt ở mỗi bài liên quan (ưu tiên hard link trên cùng ổ đĩa, nếu không hỗ trợ thì sao chép). Các bản chụp cũ không có breadcrumb sẽ được xếp vào khóa chưa xác định; dùng `scan` trên bài đang mở để lấy lại thông tin mới.
+
 Tệp lớn được tải lần lượt vào bộ nhớ trước khi ghi xuống đĩa. Lỗi 401, 403 hoặc 429 sẽ dừng lượt tải để bạn kiểm tra đăng nhập/quyền tải hoặc chờ; không tự vượt giới hạn. Liên kết hết hạn cần quét lại trang. Không bảo đảm mọi file audio/video đều có liên kết tải trực tiếp.
 
 ## Kiểm tra đã thực hiện
 
 Đã kiểm tra logic chọn URL, loại đường dẫn thao tác, tên file Windows, bỏ qua file đã tải, tự phát hiện trang và tiếp tục hàng đợi bằng kiểm thử độc lập. Chưa kiểm thử trực tiếp trên Windows hoặc tài khoản JapanesePod101: kết nối từ môi trường phát triển tới website bị proxy từ chối HTTP 403. Vì vậy chưa thể xác nhận việc sao lưu đầy đủ, khả năng đăng nhập hoặc cấu trúc trang hiện tại.
+
+Đã đối chiếu các tệp cấu trúc do người dùng cung cấp: một trang có liên kết thư viện bài học và một trang có 4 thẻ liên kết được phân loại Download. Tệp đã che URL nên chưa xác nhận đích tải, loại file, phản hồi máy chủ hoặc sự hiện diện của breadcrumb. Kiểm thử bổ sung xác minh phân thư mục, tài liệu dùng chung và lập lại chỉ mục các bản lưu cũ.

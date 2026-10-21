@@ -7,6 +7,45 @@ import jp101_backup as backup
 
 
 class BackupTests(unittest.TestCase):
+    def test_lesson_folders_use_breadcrumb_course_and_unique_identity(self):
+        data = {"heading": "Lesson 1: Greetings", "course_links": [
+            {"url": "https://www.japanesepod101.com/lesson-library/beginner", "text": "Beginner"}]}
+        first = backup.page_folder("https://www.japanesepod101.com/lesson/first", data)
+        second = backup.page_folder("https://www.japanesepod101.com/lesson/second", data)
+        self.assertEqual(first.parts[0], "lessons")
+        self.assertTrue(first.parts[1].startswith("Beginner--"))
+        self.assertNotEqual(first, second)
+        unknown = backup.page_folder("https://www.japanesepod101.com/lesson/first", {})
+        self.assertEqual(unknown.parts[1], "Chua-xac-dinh-khoa")
+
+    def test_shared_asset_is_placed_in_each_lesson_and_can_be_repeated(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(backup, "ROOT", Path(directory)):
+            root = Path(directory)
+            (root / "downloads").mkdir()
+            (root / "downloads/audio.mp3").write_bytes(b"audio data")
+            item = {"file": "downloads/audio.mp3", "sources": ["lesson-one", "lesson-two"]}
+            manifest = {"pages": {"lesson-one": {"folder": "lessons/course/one"},
+                                  "lesson-two": {"folder": "lessons/course/two"}}}
+            backup.organize_download(item, manifest)
+            backup.organize_download(item, manifest)
+            self.assertEqual(len(item["lesson_files"]), 2)
+            for path in item["lesson_files"]:
+                self.assertEqual((root / path).read_bytes(), b"audio data")
+
+    def test_existing_page_moves_to_organized_index_without_deleting_original(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(backup, "ROOT", Path(directory)):
+            root = Path(directory)
+            old = root / "pages/old"
+            old.mkdir(parents=True)
+            backup.write_json(old / "page.json", {"title": "A lesson"})
+            (old / "content.txt").write_text("Lesson text")
+            url = "https://www.japanesepod101.com/lesson/example"
+            manifest = {"pages": {url: {"folder": "pages/old"}}}
+            backup.organize_saved_pages(manifest)
+            target = root / manifest["pages"][url]["folder"]
+            self.assertEqual((target / "content.txt").read_text(), "Lesson text")
+            self.assertTrue((old / "content.txt").exists())
+
     def test_tab_menu_does_not_read_title_during_navigation(self):
         page = Mock()
         page.url = "https://www.japanesepod101.com/dashboard?private=value"

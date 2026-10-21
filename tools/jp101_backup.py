@@ -5,6 +5,8 @@ import re
 import time
 import queue
 import threading
+import os
+import shutil
 from collections import deque
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
@@ -196,6 +198,10 @@ def capture(page, manifest):
     page.wait_for_timeout(500)
     data = page.evaluate("""() => ({
       title: document.title,
+      heading: document.querySelector('main h1, article h1, h1')?.innerText || '',
+      course_links: [...document.querySelectorAll(
+        '[aria-label*="breadcrumb" i] a[href], .breadcrumb a[href], .breadcrumbs a[href], [itemprop="itemListElement"] a[href]'
+      )].map(a => ({url: a.href, text: a.innerText})),
       text: document.body.innerText,
       tables: [...document.querySelectorAll('table')].map(t =>
         [...t.rows].map(r => [...r.cells].map(c => c.innerText))),
@@ -204,8 +210,7 @@ def capture(page, manifest):
         download: a.hasAttribute('download')
       }))
     })""")
-    key = hashlib.sha256(page.url.encode()).hexdigest()[:16]
-    folder = ROOT / "pages" / key
+    folder = ROOT / page_folder(page.url, data)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "content.txt").write_text(data["text"], encoding="utf-8")
     write_json(folder / "page.json", {"url": page.url, **data})
@@ -215,11 +220,74 @@ def capture(page, manifest):
         link["url"] = urljoin(page.url, link["url"])
         if download_candidate(link):
             old = manifest["downloads"].get(link["url"], {})
-            manifest["downloads"][link["url"]] = {**link, "source": page.url, **old}
+            sources = set(old.get("sources", [])) | {page.url}
+            if old.get("source"):
+                sources.add(old["source"])
+            manifest["downloads"][link["url"]] = {
+                **old, **link, "source": old.get("source", page.url), "sources": sorted(sources)
+            }
             count += 1
     write_json(ROOT / "manifest.json", manifest)
     print(f"Da luu noi dung hien thi va bang du lieu; tim thay {count} lien ket tai.")
     return data["links"]
+
+
+def page_folder(url, data):
+    key = hashlib.sha256(url.encode()).hexdigest()[:12]
+    if not urlsplit(url).path.startswith("/lesson/"):
+        return Path("pages") / key
+    courses = []
+    for link in data.get("course_links", []):
+        if site_url(link["url"]) and urlsplit(link["url"]).path.startswith("/lesson-library/"):
+            courses.append(link)
+    course = "Chua-xac-dinh-khoa"
+    if courses:
+        link = courses[-1]
+        course_key = hashlib.sha256(link["url"].encode()).hexdigest()[:6]
+        course = safe_name(link.get("text") or "Khoa-hoc")[:24] + "--" + course_key
+    title = safe_name(data.get("heading") or data.get("title") or "Bai-hoc")[:42]
+    return Path("lessons") / course / f"{title}--{key}"
+
+
+def organize_download(item, manifest):
+    """Keep a shared cache and place each asset beside every lesson that references it."""
+    source = ROOT / item["file"]
+    sources = set(item.get("sources", []))
+    if item.get("source"):
+        sources.add(item["source"])
+    placed = set(item.get("lesson_files", []))
+    for url in sources:
+        record = manifest.get("pages", {}).get(url, {})
+        relative = Path(record.get("folder", "."))
+        if not relative.parts or relative.parts[0] != "lessons":
+            continue
+        target = ROOT / relative / "files" / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            try:
+                os.link(source, target)
+            except OSError:
+                shutil.copy2(source, target)
+        placed.add(str(target.relative_to(ROOT)))
+    item["lesson_files"] = sorted(placed)
+
+
+def organize_saved_pages(manifest):
+    """Also organize earlier captures without revisiting lessons or deleting originals."""
+    for url, record in manifest.get("pages", {}).items():
+        original = ROOT / record["folder"]
+        saved = original / "page.json"
+        if not saved.is_file() or not urlsplit(url).path.startswith("/lesson/"):
+            continue
+        data = json.loads(saved.read_text(encoding="utf-8"))
+        target = ROOT / page_folder(url, data)
+        if original == target:
+            continue
+        target.mkdir(parents=True, exist_ok=True)
+        for name in ("page.json", "content.txt"):
+            if (original / name).is_file() and not (target / name).exists():
+                shutil.copy2(original / name, target / name)
+        record["folder"] = str(target.relative_to(ROOT))
 
 
 def auto_backup(context, manifest, max_pages=5000):
@@ -336,6 +404,8 @@ def download_all(context, manifest):
     folder.mkdir(exist_ok=True)
     for url, item in manifest["downloads"].items():
         if item.get("file") and (ROOT / item["file"]).is_file():
+            organize_download(item, manifest)
+            write_json(ROOT / "manifest.json", manifest)
             continue
         response = None
         try:
@@ -348,7 +418,9 @@ def download_all(context, manifest):
             content_type = response.headers.get("content-type", "").lower()
             if "text/html" in content_type or "application/json" in content_type:
                 raise RuntimeError("Lien ket tra ve trang/API, khong phai tep tai xuong")
-            name = safe_name(unquote(Path(urlsplit(url).path).name))
+            raw_name = safe_name(unquote(Path(urlsplit(url).path).name))
+            suffix = Path(raw_name).suffix[:10]
+            name = Path(raw_name).stem[:55] + suffix
             digest = hashlib.sha256(url.encode()).hexdigest()[:12]
             target = folder / f"{digest}-{name}"
             body = response.body()
@@ -359,6 +431,7 @@ def download_all(context, manifest):
             temporary.replace(target)
             item["file"] = str(target.relative_to(ROOT))
             item["bytes"] = len(body)
+            organize_download(item, manifest)
             item.pop("error", None)
             print(f"Da tai: {target.name}")
         except Exception as exc:
@@ -380,6 +453,8 @@ def main():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {
         "pages": {}, "downloads": {}
     }
+    organize_saved_pages(manifest)
+    write_json(manifest_path, manifest)
     print("Dang nhap truc tiep trong cua so Microsoft Edge. Khong nhap mat khau vao terminal.")
     print("Phien ban: Edge / navigation-retry-v1")
     print("Day la ho so Edge rieng: ban can dang nhap lai, du da dang nhap trong Edge thuong.")
