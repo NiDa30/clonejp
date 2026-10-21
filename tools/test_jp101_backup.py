@@ -1,12 +1,45 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import jp101_backup as backup
 
 
 class BackupTests(unittest.TestCase):
+    def test_tab_menu_does_not_read_title_during_navigation(self):
+        page = Mock()
+        page.url = "https://www.japanesepod101.com/dashboard?private=value"
+        page.is_closed.return_value = False
+        page.title.side_effect = RuntimeError("Execution context was destroyed")
+        with patch("builtins.print") as output:
+            self.assertEqual(backup.list_site_tabs(Mock(pages=[page])), [page])
+            self.assertNotIn("private", str(output.call_args_list))
+        page.title.assert_not_called()
+
+    def test_structure_retries_navigation_then_succeeds(self):
+        page = Mock(url="https://www.japanesepod101.com/dashboard")
+        page.is_closed.return_value = False
+        action = Mock(side_effect=[RuntimeError("Execution context was destroyed, most likely because of a navigation"), None])
+        self.assertTrue(backup.read_selected_page(page, action, RuntimeError))
+        self.assertEqual(action.call_count, 2)
+
+    def test_structure_stops_retrying_without_raising(self):
+        page = Mock(url="https://www.japanesepod101.com/dashboard")
+        page.is_closed.return_value = False
+        action = Mock(side_effect=RuntimeError("Execution context was destroyed"))
+        self.assertFalse(backup.read_selected_page(page, action, RuntimeError))
+        self.assertEqual(action.call_count, 3)
+
+    def test_structure_does_not_read_closed_or_redirected_tab(self):
+        action = Mock()
+        page = Mock(url="https://other.example/login")
+        page.is_closed.return_value = True
+        self.assertFalse(backup.read_selected_page(page, action, RuntimeError))
+        page.is_closed.return_value = False
+        self.assertFalse(backup.read_selected_page(page, action, RuntimeError))
+        action.assert_not_called()
+
     def test_terminal_wait_keeps_browser_events_running(self):
         import threading
         from types import SimpleNamespace

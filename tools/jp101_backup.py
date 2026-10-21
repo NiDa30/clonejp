@@ -13,6 +13,39 @@ ROOT = Path(__file__).resolve().parents[1] / ".jp101-local"
 MEDIA = {".mp3", ".m4a", ".mp4", ".pdf", ".zip", ".csv", ".tsv", ".xlsx"}
 
 
+def list_site_tabs(context):
+    """Do not evaluate titles: a tab can navigate while its menu is displayed."""
+    pages = [page for page in context.pages if not page.is_closed() and site_url(page.url)]
+    for index, page in enumerate(pages, 1):
+        parsed = urlsplit(page.url)
+        print(f"{index}: {parsed.hostname}{parsed.path}")
+    return pages
+
+
+def read_selected_page(page, action, browser_error):
+    """Retry a read-only operation if navigation destroys its JavaScript context."""
+    for attempt in range(3):
+        if page.is_closed():
+            print("Tab da dong. Hay mo lai trang va nhap lai lenh.")
+            return False
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=10000)
+            if not site_url(page.url):
+                print("Tab da chuyen sang trang khac. Hay quay lai JapanesePod101 va thu lai.")
+                return False
+            action(page)
+            return True
+        except browser_error as exc:
+            transient = any(message in str(exc).lower() for message in (
+                "execution context was destroyed", "cannot find context", "frame was detached",
+            ))
+            if not transient or attempt == 2:
+                print("Chua doc duoc trang. Hay doi trang tai xong roi nhap lai lenh; cua so Edge van duoc giu mo.")
+                return False
+            print("Trang dang chuyen huong, dang thu doc lai...")
+    return False
+
+
 def browser_input(context, prompt):
     """Keep Playwright processing browser events while the terminal awaits input."""
     results = queue.Queue()
@@ -340,7 +373,7 @@ def download_all(context, manifest):
 
 
 def main():
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import Error as BrowserError, sync_playwright
 
     ROOT.mkdir(exist_ok=True)
     manifest_path = ROOT / "manifest.json"
@@ -348,6 +381,7 @@ def main():
         "pages": {}, "downloads": {}
     }
     print("Dang nhap truc tiep trong cua so Microsoft Edge. Khong nhap mat khau vao terminal.")
+    print("Phien ban: Edge / navigation-retry-v1")
     print("Day la ho so Edge rieng: ban can dang nhap lai, du da dang nhap trong Edge thuong.")
     print("Neu dang nhap loi, dung lai va ghi thong bao loi. Chua nhap auto khi chua dang nhap xong.")
     print("Mo trang bai hoc/tu vung/tien do, mo muc Download va cuon tai het du lieu can luu.")
@@ -359,7 +393,10 @@ def main():
         )
         try:
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto("https://www.japanesepod101.com/dashboard", wait_until="domcontentloaded")
+            try:
+                page.goto("https://www.japanesepod101.com/dashboard", wait_until="domcontentloaded")
+            except BrowserError:
+                print("Chua mo duoc dashboard. Ban co the mo trang thu cong trong Edge roi tiep tuc.")
             while True:
                 command = browser_input(context, "auto / scan / structure / download / quit > ").strip().lower()
                 if command == "quit":
@@ -369,19 +406,17 @@ def main():
                 elif command == "download":
                     download_all(context, manifest)
                 elif command in {"scan", "structure"}:
-                    pages = [p for p in context.pages if not p.is_closed() and site_url(p.url)]
+                    pages = list_site_tabs(context)
                     if not pages:
                         print("Chua co tab JapanesePod101.")
                         continue
-                    for index, tab in enumerate(pages, 1):
-                        print(f"{index}: {tab.title()}")
                     selection = browser_input(context, "So tab can luu [1]: ").strip() or "1"
                     if selection.isdigit() and 1 <= int(selection) <= len(pages):
                         selected = pages[int(selection) - 1]
                         if command == "structure":
-                            export_structure(selected)
+                            read_selected_page(selected, export_structure, BrowserError)
                         else:
-                            capture(selected, manifest)
+                            read_selected_page(selected, lambda tab: capture(tab, manifest), BrowserError)
         finally:
             context.close()
     print(f"Du lieu da luu tai: {ROOT}")

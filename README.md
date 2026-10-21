@@ -23,6 +23,8 @@ Edge tự mở là hoạt động bình thường. Đây là hồ sơ riêng, kh
 
 Nếu thất bại, thử đăng nhập bằng Edge bình thường để so sánh. Ghi lại thông báo chính xác và cách đăng nhập (email/mật khẩu hay qua nhà cung cấp khác); không gửi mật khẩu/cookie. Nếu trang báo CAPTCHA hoặc từ chối trình duyệt tự động, xử lý qua luồng chính thức của website hoặc hỗ trợ JapanesePod101; công cụ không vượt cơ chế này. Việc sửa xử lý sự kiện chưa chứng minh sẽ giải quyết lỗi đăng nhập cụ thể của bạn.
 
+Nếu bản cũ báo `Page.title: Execution context was destroyed`, đó là lỗi đọc tab trong lúc chuyển trang. Cập nhật bằng `git pull --ff-only` trong thư mục repository (hoặc tải ZIP code mới), rồi chạy lại `start-windows.bat`. Bản sửa hiển thị `Phien ban: Edge / navigation-retry-v1`; menu tab dùng đường dẫn thay vì đọc tiêu đề. Lệnh `structure`/`scan` chờ trang sẵn sàng, thử lại tối đa 3 lần nếu ngữ cảnh bị hủy và giữ cửa sổ mở khi chưa đọc được. Đợi đăng nhập/chuyển trang xong rồi thử lại lệnh nếu cần. Thông báo đề nghị cập nhật pip không phải lỗi này.
+
 ## Lấy cấu trúc trang để hoàn thiện chế độ tự động
 
 1. Dùng bản công cụ mới này và đăng nhập trong Microsoft Edge do công cụ mở.
