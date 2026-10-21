@@ -19,6 +19,10 @@ Mỗi lượt tối đa 5.000 trang, mỗi trang tối đa 20 lượt kiểm tra
 
 Mỗi lượt `auto` đọc lại dashboard, Lesson Library và các trang học đang mở để tìm liên kết mới sau khi đăng nhập; các bài khác đã xử lý vẫn được giữ trong trạng thái tiếp tục. Không cần xóa `crawl.json`. Báo cáo bổ sung số trang bài học, liên kết tải, file đã tải và lỗi tải. Nếu số trang bài học bằng 0, chưa có cơ sở nói đã sao lưu bài học: mở Lesson Library trong Edge do công cụ mở, đợi danh sách xuất hiện rồi chạy `auto` lại và gửi `coverage.json` mới nếu vẫn chưa tìm thấy bài.
 
+Các URL `/lesson/...` được ưu tiên trước trang danh sách. `saved_lesson_pages` hiện đếm theo dạng URL này, chưa phân loại nội dung bằng API. Báo cáo có số lượt thấy/chấp nhận liên kết bài học và `last_error` (bước thực hiện, loại lỗi và mã lỗi đã lược bỏ URL). Không cần gửi `crawl.json` hay `manifest.json` để chẩn đoán ban đầu.
+
+Nếu lượt quét dừng do lỗi, bước tải tự động chưa chạy; `failed_downloads: 0` không có nghĩa đã thử tải thành công. Sau khi chắc chắn phiên đăng nhập còn hoạt động và trang không báo chặn/giới hạn, bạn có thể nhập `download` để thử các liên kết đã thu thập, hoặc `auto` để tiếp tục hàng đợi. Lỗi 401/403/429 khi tải sẽ dừng lượt tải. `coverage.json` được cập nhật sau lệnh `download`.
+
 ## Nếu không đăng nhập được
 
 Edge tự mở là hoạt động bình thường. Đây là hồ sơ riêng, không có sẵn tài khoản/cookie từ Edge thường; hãy đăng nhập trong cửa sổ do công cụ mở và chỉ nhập `auto` sau khi vào dashboard thành công. Trong lúc chờ lệnh, công cụ vẫn xử lý sự kiện trình duyệt để hỗ trợ cửa sổ và sự kiện đăng nhập.

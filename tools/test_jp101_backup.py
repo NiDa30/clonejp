@@ -7,6 +7,20 @@ import jp101_backup as backup
 
 
 class BackupTests(unittest.TestCase):
+    def test_error_report_does_not_copy_sensitive_exception_text(self):
+        report = backup.error_summary(RuntimeError(
+            'Page.goto: net::ERR_CONNECTION_RESET at https://example.com/?token=secret'), "navigation")
+        self.assertEqual(report["code"], "ERR_CONNECTION_RESET")
+        self.assertNotIn("secret", str(report))
+        self.assertEqual(backup.error_summary(RuntimeError("Execution context was destroyed"), "capture")["code"],
+                         "navigation_context_destroyed")
+
+    def test_discovery_counts_distinguish_rejected_lesson_links(self):
+        links = [{"url": "https://www.japanesepod101.com/lesson/a"},
+                 {"url": "https://www.japanesepod101.com/lesson/b?unknown=value"},
+                 {"url": "https://www.japanesepod101.com/lesson-library"}]
+        self.assertEqual(backup.discovery_counts(links), {"lesson_links_seen": 2, "lesson_links_accepted": 1})
+
     def test_lesson_folders_use_breadcrumb_course_and_unique_identity(self):
         data = {"heading": "Lesson 1: Greetings", "course_links": [
             {"url": "https://www.japanesepod101.com/lesson-library/beginner", "text": "Beginner"}]}
@@ -132,9 +146,9 @@ class BackupTests(unittest.TestCase):
                 patch.object(backup, "download_all") as downloads, patch.object(backup.time, "sleep"):
             manifest = {"pages": {}, "downloads": {}}
             backup.auto_backup(context, manifest)
-            self.assertEqual(page.visits, [dashboard, library, lesson])
+            self.assertEqual(page.visits, [dashboard, lesson, library])
             backup.auto_backup(context, manifest)
-            self.assertEqual(page.visits, [dashboard, library, lesson, dashboard, library])
+            self.assertEqual(page.visits, [dashboard, lesson, library, dashboard, library])
             self.assertEqual(downloads.call_count, 2)
 
     def test_coverage_distinguishes_pages_download_links_and_files(self):

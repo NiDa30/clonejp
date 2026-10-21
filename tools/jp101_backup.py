@@ -15,6 +15,31 @@ ROOT = Path(__file__).resolve().parents[1] / ".jp101-local"
 MEDIA = {".mp3", ".m4a", ".mp4", ".pdf", ".zip", ".csv", ".tsv", ".xlsx"}
 
 
+def error_summary(exc, stage):
+    """Allowlisted error categories: never copy exception URLs or credentials."""
+    message = str(exc).lower()
+    code = "unclassified_error"
+    network = re.search(r"net::(err_[a-z0-9_]+)", message)
+    if network:
+        code = network.group(1).upper()
+    elif "execution context was destroyed" in message or "cannot find context" in message:
+        code = "navigation_context_destroyed"
+    elif "timeout" in message or "timeout" in type(exc).__name__.lower():
+        code = "timeout"
+    elif "has been closed" in message or "target closed" in message:
+        code = "browser_or_page_closed"
+    elif isinstance(exc, OSError):
+        code = "filesystem_error"
+    return {"stage": stage, "type": type(exc).__name__, "code": code}
+
+
+def discovery_counts(links):
+    lesson_links = [link["url"] for link in links if site_url(link["url"])
+                    and urlsplit(link["url"]).path.startswith("/lesson/")]
+    return {"lesson_links_seen": len(lesson_links),
+            "lesson_links_accepted": sum(learning_url(url) is not None for url in lesson_links)}
+
+
 def list_site_tabs(context):
     """Do not evaluate titles: a tab can navigate while its menu is displayed."""
     pages = [page for page in context.pages if not page.is_closed() and site_url(page.url)]
@@ -214,7 +239,8 @@ def capture(page, manifest):
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "content.txt").write_text(data["text"], encoding="utf-8")
     write_json(folder / "page.json", {"url": page.url, **data})
-    manifest["pages"][page.url] = {"title": data["title"], "folder": str(folder.relative_to(ROOT))}
+    manifest["pages"][page.url] = {"title": data["title"], "folder": str(folder.relative_to(ROOT)),
+                                    "discovery": discovery_counts(data["links"])}
     count = 0
     for link in data["links"]:
         link["url"] = urljoin(page.url, link["url"])
@@ -298,14 +324,17 @@ def auto_backup(context, manifest, max_pages=5000):
     }
     state.setdefault("scroll_limits", [])
     done = set(state["done"])
-    queue = deque(state["pending"])
+    queue = deque(sorted(state["pending"], key=lambda url: not urlsplit(url).path.startswith("/lesson/")))
     known = set(queue) | done
 
     def enqueue(url):
         candidate = learning_url(url)
         if candidate and candidate not in known:
             known.add(candidate)
-            queue.append(candidate)
+            if urlsplit(candidate).path.startswith("/lesson/"):
+                queue.appendleft(candidate)
+            else:
+                queue.append(candidate)
 
     # Always refresh entry pages: an earlier visit may have happened before login
     # or before client-side links appeared. Retain completed non-entry lessons.
@@ -334,10 +363,12 @@ def auto_backup(context, manifest, max_pages=5000):
     page = context.new_page()
     visited = 0
     stop_reason = "queue_exhausted"
+    last_error = None
     try:
         while queue and visited < max_pages:
             url = queue[0]  # Remove only after successful capture, so interruption is resumable.
             print(f"Tu dong: da luu {len(done)} trang; con {len(queue)} lien ket cho.")
+            stage = "navigation"
             try:
                 response = page.goto(url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_timeout(2000)
@@ -350,6 +381,7 @@ def auto_backup(context, manifest, max_pages=5000):
                     stop_reason = "login_or_redirect_requires_attention"
                     break
                 # Collect links during scrolling, including virtualized lists.
+                stage = "scroll_and_discover"
                 previous = None
                 stable = 0
                 for _ in range(20):
@@ -369,17 +401,20 @@ def auto_backup(context, manifest, max_pages=5000):
                 else:
                     if url not in state["scroll_limits"]:
                         state["scroll_limits"].append(url)
+                stage = "capture"
                 links = capture(page, manifest) or []
                 for link in links:
                     enqueue(link["url"])
                 done.add(url)
                 state["errors"].pop(url, None)
-                queue.popleft()
+                # Discovery may have prepended lessons ahead of the current page.
+                queue.remove(url)
                 visited += 1
             except Exception as exc:
                 state["errors"][url] = type(exc).__name__
+                last_error = error_summary(exc, stage)
                 stop_reason = "page_error_retry_on_next_run"
-                print(f"Tam dung do loi {type(exc).__name__}; hang doi da duoc giu lai.")
+                print(f"Tam dung: {last_error['code']} tai buoc {stage}; hang doi da duoc giu lai.")
                 break
             finally:
                 checkpoint()
@@ -395,6 +430,7 @@ def auto_backup(context, manifest, max_pages=5000):
             "saved_learning_pages": len(done), "pending_learning_pages": len(queue),
             "stop_reason": stop_reason, "errors": len(state["errors"]),
             "pages_reaching_scroll_limit": len(state["scroll_limits"]),
+            "last_error": last_error,
             "full_account_export_verified": False,
             "limitations": ["Only discovered HTML learning links are followed",
                             "JavaScript-only pagination, exports and hidden API data are not collected",
@@ -420,6 +456,18 @@ def update_coverage(manifest):
                    "downloaded_files": completed,
                    "failed_downloads": sum(bool(item.get("error")) for item in items),
                    "downloads_remaining": len(items) - completed})
+    seen = 0
+    accepted = 0
+    for record in pages.values():
+        counts = record.get("discovery")
+        if counts is None and record.get("folder"):
+            saved = ROOT / record["folder"] / "page.json"
+            if saved.is_file():
+                counts = discovery_counts(json.loads(saved.read_text(encoding="utf-8")).get("links", []))
+        seen += (counts or {}).get("lesson_links_seen", 0)
+        accepted += (counts or {}).get("lesson_links_accepted", 0)
+    report["lesson_link_occurrences_seen"] = seen
+    report["lesson_link_occurrences_accepted"] = accepted
     if not lessons:
         report["discovery_warning"] = "No lesson pages saved; library/login/link discovery requires inspection"
     else:
