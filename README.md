@@ -1,5 +1,9 @@
 # Sao lưu JapanesePod101 trên Windows 11
 
+## Công cụ OCR giáo trình scan mới
+
+Chạy **`start-ocr-windows.bat`** để mở giao diện Input/Output cho PDF scan Nhật–Việt. Xem [hướng dẫn OCR](scan_tool/README.md) để cài Tesseract một lần, thêm link/file và lấy Markdown cùng tên tài liệu. Công cụ này hoạt động riêng với bộ tải JapanesePod101 bên dưới.
+
 Công cụ chạy trên máy bạn, mở Microsoft Edge để bạn đăng nhập trực tiếp. Chế độ `auto` tự lần theo liên kết học tập tìm được, cuộn trang, lưu chữ/bảng và tải tài liệu có liên kết tải xuống. Có thể tiếp tục hàng đợi khi chạy lại. Chỉ tải nội dung được tài khoản cho phép tải.
 
 **Chưa thể bảo đảm sao lưu toàn bộ tài khoản.** Giao diện sau đăng nhập chưa được kiểm chứng. Công cụ không gọi API nội bộ, không lấy media từ luồng phát và không vượt DRM. Phân trang có liên kết HTML được lần theo; nút JavaScript, dữ liệu ẩn hoặc chức năng xuất riêng cần điều chỉnh sau khi kiểm tra cấu trúc trang. Nội dung chữ và bảng là bản chụp để đọc, không phải bản xuất có thể nhập lại tiến độ hoặc flashcard.

@@ -1,3 +1,5 @@
 .jp101-local/
 __pycache__/
 .venv/
+.ocr-local/
+.venv-ocr/
