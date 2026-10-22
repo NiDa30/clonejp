@@ -44,7 +44,7 @@ Có thể cài bộ ngôn ngữ bằng lệnh:
 ## Dùng giao diện
 
 - Dán link PDF/ảnh tải trực tiếp, bấm **＋**. Bấm **✕** để bỏ khỏi danh sách trước khi chạy.
-- Hoặc chọn nhiều file PDF, PNG, JPG, TIFF, WebP rồi bấm **Thêm file đã chọn**. Upload tối đa 512 MB/file; tải link tối đa 1 GB/file.
+- Hoặc chọn nhiều file PDF, PNG, JPG, TIFF, WebP. File được tự thêm vào danh sách, không cần bấm thêm lần nữa. Upload tối đa 512 MB/file; tải link tối đa 1 GB/file.
 - Bấm **Bắt đầu xử lý**. Mỗi tài liệu có tiến độ riêng và nút **Dừng**. Các tài liệu vượt số slot sẽ chờ lượt.
 - Tác vụ lỗi hoặc bị ngắt có nút **Tiếp tục**; các trang đã OCR xong được dùng lại nếu input không đổi.
 - Trong Output, tải từng file hoặc xem trước Markdown. Văn bản có thể chọn, copy và chỉnh sửa bằng trình soạn thảo.

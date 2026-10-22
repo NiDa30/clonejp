@@ -42,6 +42,9 @@ def main():
         st.caption(status["message"])
     if "inputs" not in st.session_state:
         st.session_state.inputs = []
+    if "upload_batch" not in st.session_state:
+        st.session_state.upload_batch = 0
+        st.session_state.uploaded_ids = set()
     left, right = st.columns([1, 1.35], gap="large")
     with left:
         st.subheader("Input")
@@ -59,20 +62,26 @@ def main():
                 name = safe_filename(Path(parsed.path).name or "tai-lieu.pdf")
                 st.session_state.inputs.append({"id": uuid.uuid4().hex, "name": name, "url": url.strip()})
         uploads = st.file_uploader("Hoặc chọn PDF / ảnh từ máy", type=["pdf", "png", "jpg", "jpeg", "tif", "tiff", "webp"],
-                                   accept_multiple_files=True, key="files")
-        if st.button("Thêm file đã chọn", icon=":material/add:", disabled=not uploads):
+                                   accept_multiple_files=True, key=f"files-{st.session_state.upload_batch}")
+        for upload in uploads or []:
+            if upload.file_id in st.session_state.uploaded_ids:
+                continue
             inbox = STORE / "inputs"
             inbox.mkdir(exist_ok=True)
-            for upload in uploads:
-                # The upload object is already held by Streamlit; avoid making another bytes copy.
-                entry_id = uuid.uuid4().hex
-                name = safe_filename(upload.name)
-                folder = inbox / entry_id
-                folder.mkdir()
-                path = folder / name
+            # Selecting a file is sufficient; no second "add file" click required.
+            entry_id = uuid.uuid4().hex
+            name = safe_filename(upload.name)
+            folder = inbox / entry_id
+            folder.mkdir()
+            path = folder / name
+            try:
                 with path.open("wb") as output:
                     output.write(upload.getbuffer())
                 st.session_state.inputs.append({"id": entry_id, "name": name, "path": str(path.resolve())})
+                st.session_state.uploaded_ids.add(upload.file_id)
+            except OSError:
+                path.unlink(missing_ok=True)
+                st.error(f"Không lưu được {name}. Kiểm tra dung lượng và quyền ghi thư mục dự án.")
         if not st.session_state.inputs:
             st.info("Thêm link bằng biểu tượng ＋ hoặc chọn nhiều file để bắt đầu.")
         for item in list(st.session_state.inputs):
@@ -84,6 +93,12 @@ def main():
                 st.rerun()
         searchable = st.checkbox("Xuất thêm PDF có thể tìm kiếm", help="Giữ ảnh gốc và thêm lớp chữ; tốn thêm dung lượng và thời gian.")
         st.caption("Luôn xuất Markdown (.md), văn bản (.txt) và dữ liệu trang (.json). Tên file giữ theo đầu vào.")
+        if not status["ready"]:
+            st.info("Chưa thể bắt đầu: " + status["message"] + " Bấm Tải bộ ngôn ngữ ở phía trên nếu thiếu jpn/vie.")
+        elif not st.session_state.inputs:
+            st.caption("Chọn ít nhất một file hoặc thêm link bằng nút ＋ để bật nút xử lý.")
+        else:
+            st.caption(f"Đã sẵn sàng: {len(st.session_state.inputs)} tài liệu.")
         if st.button("Bắt đầu xử lý", type="primary", icon=":material/play_arrow:",
                      disabled=not status["ready"] or not st.session_state.inputs, use_container_width=True):
             jobs.refresh_plan()
@@ -91,6 +106,8 @@ def main():
                 jobs.create(item["name"], "url" if item.get("url") else "file",
                             path=item.get("path"), url=item.get("url"), searchable=searchable)
             st.session_state.inputs = []
+            st.session_state.upload_batch += 1
+            st.session_state.uploaded_ids = set()
             st.rerun()
         st.caption(f"Tự động: tối đa {jobs.plan['workers']} tài liệu đồng thời · 1 luồng OCR/tài liệu · từng trang 300 DPI")
         st.caption("Số luồng được tính khi mở ứng dụng theo CPU/RAM trống; không tải cả tài liệu 100+ trang vào bộ nhớ ảnh.")
