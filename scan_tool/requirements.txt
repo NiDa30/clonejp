@@ -1,3 +1,7 @@
 streamlit==1.66.0
 PyMuPDF==1.26.6
 psutil==7.2.2
+rapidocr==3.10.0
+onnxruntime==1.31.0
+opencv-python-headless==5.0.0.93
+pymupdf-fonts==1.0.5

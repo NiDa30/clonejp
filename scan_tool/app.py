@@ -24,7 +24,10 @@ def main():
     jobs = manager()
     st.title("Scan → Văn bản")
     st.caption("Giáo trình Nhật–Việt · Xử lý trên máy · Không dùng API AI")
-    status = engine_status()
+    selected_mode = st.selectbox("Chế độ OCR", ["Cân bằng Nhật–Việt · v2", "Nhanh · Tesseract 200 DPI"],
+                                  help="Cân bằng tách vùng chữ và nhận dạng tiếng Việt riêng. Nhanh ưu tiên tốc độ, có thể sai nhiều hơn.")
+    mode = "balanced" if selected_mode.startswith("Cân bằng") else "fast"
+    status = engine_status(mode)
     if not status["ready"]:
         st.warning(status["message"])
         with st.expander("Cài OCR một lần", expanded=True):
@@ -104,12 +107,12 @@ def main():
             jobs.refresh_plan()
             for item in st.session_state.inputs:
                 jobs.create(item["name"], "url" if item.get("url") else "file",
-                            path=item.get("path"), url=item.get("url"), searchable=searchable)
+                            path=item.get("path"), url=item.get("url"), searchable=searchable, mode=mode)
             st.session_state.inputs = []
             st.session_state.upload_batch += 1
             st.session_state.uploaded_ids = set()
             st.rerun()
-        st.caption(f"Tự động: tối đa {jobs.plan['workers']} tài liệu đồng thời · 1 luồng OCR/tài liệu · từng trang 300 DPI")
+        st.caption(f"Tự động: tối đa {jobs.plan['workers']} tài liệu đồng thời · 1 luồng OCR/tài liệu · {220 if mode == 'balanced' else 200} DPI")
         st.caption("Số luồng được tính khi mở ứng dụng theo CPU/RAM trống; không tải cả tài liệu 100+ trang vào bộ nhớ ảnh.")
     with right:
         render_output(jobs)
@@ -142,6 +145,8 @@ def render_output(jobs):
                 st.success("Hoàn thành")
                 if job.get("empty_pages"):
                     st.warning(f"{job['empty_pages']} trang không có chữ nhận dạng được; kiểm tra bản gốc.")
+                if job.get("review_pages"):
+                    st.warning(f"{job['review_pages']} trang có vùng chữ cần đối chiếu. Điểm OCR không phải tỷ lệ chính xác.")
                 for name in job.get("files", []):
                     target = Path(job["folder"]) / "output" / name
                     if target.is_file():
@@ -149,12 +154,35 @@ def render_output(jobs):
                         st.download_button("Tải " + name, data=lambda p=target: p.read_bytes(),
                                            file_name=name, key=job["id"] + name, on_click="ignore")
                 if st.button("Xem Markdown", key="view-" + job["id"]):
+                    st.session_state["show-md-" + job["id"]] = not st.session_state.get("show-md-" + job["id"], False)
+                if st.session_state.get("show-md-" + job["id"]):
                     text_path = next((Path(job["folder"]) / "output").glob("*.md"), None)
                     if text_path:
                         with text_path.open(encoding="utf-8") as text:
                             preview = text.read(30000)
                         st.code(preview, language="markdown")
                         st.caption("Xem trước tối đa 30.000 ký tự; tải file để chỉnh sửa toàn bộ.")
+                with st.expander("Đối chiếu ảnh gốc và sửa chữ từng trang"):
+                    number = st.number_input("Trang", min_value=1, max_value=max(1, total), value=1,
+                                             key="page-" + job["id"])
+                    if st.button("Mở trang", key="open-page-" + job["id"]):
+                        st.session_state["inspect-" + job["id"]] = int(number)
+                    selected = st.session_state.get("inspect-" + job["id"])
+                    if selected and job.get("input_path"):
+                        source = Path(job["input_path"])
+                        if source.is_file():
+                            image_column, text_column = st.columns(2)
+                            image_column.image(page_preview(str(source), selected, source.stat().st_mtime_ns))
+                            text_file = next((Path(job["folder"]) / "output").glob("*.txt"), None)
+                            if text_file:
+                                pages = text_file.read_text(encoding="utf-8").split("\f")
+                                original = pages[selected - 1].strip() if selected <= len(pages) else ""
+                                edited = text_column.text_area(f"Chữ trang {selected}", original, height=480,
+                                                               key=f"edit-{job['id']}-{selected}")
+                                text_column.download_button("Tải trang đã sửa", edited,
+                                                            file_name=f"{text_file.stem}-trang-{selected}.md",
+                                                            key=f"save-page-{job['id']}-{selected}", on_click="ignore")
+                                text_column.caption("Bản sửa tải riêng; không ghi đè kết quả OCR gốc.")
             else:
                 st.caption(message)
             if state in {"running", "queued", "downloading"}:
@@ -165,6 +193,13 @@ def render_output(jobs):
                 if st.button("Tiếp tục", key="resume-" + job["id"]):
                     jobs.start(job["id"])
                     st.rerun(scope="fragment")
+
+
+@st.cache_data(max_entries=4, ttl=600)
+def page_preview(path, number, modified):
+    import fitz
+    with fitz.open(path) as document:
+        return document[number - 1].get_pixmap(matrix=fitz.Matrix(1.2, 1.2), alpha=False).tobytes("png")
 
 
 if __name__ == "__main__":

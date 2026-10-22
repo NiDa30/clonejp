@@ -1,6 +1,19 @@
 # Scan → Văn bản: giáo trình Nhật–Việt
 
-Giao diện web local có hai phần Input và Output, chạy trên Windows 11. Tesseract nhận dạng `jpn+vie+eng` trên CPU, không gửi tài liệu tới API AI, không tốn token. Internet cần cho cài đặt ban đầu và tải tài liệu đầu vào bằng link.
+Giao diện web local có hai phần Input và Output, chạy trên Windows 11. Phiên bản 2 kết hợp RapidOCR/PP-OCRv6 để tìm vùng chữ và đọc tiếng Nhật với Tesseract để đọc riêng vùng tiếng Việt. Chạy trên CPU, không gửi tài liệu tới API AI, không tốn token. Internet cần cho cài đặt ban đầu và tải tài liệu đầu vào bằng link.
+
+## Mới trong phiên bản 2
+
+- **Cân bằng Nhật–Việt** (mặc định): xử lý theo vùng, sửa phối cảnh các dòng nghiêng, gom vùng Việt thành batch để gọi Tesseract ít lần hơn. Render 220 DPI, giữ mô hình nhận dạng trong bộ nhớ suốt tài liệu.
+- **Nhanh**: Tesseract ở 200 DPI, ưu tiên tốc độ, có thể đọc kém hơn với furigana và nhiều cột. Chế độ Cân bằng có thể chậm hơn bản cũ; không hứa vừa nhanh hơn vừa chính xác hơn trên mọi tài liệu.
+- JSON ghi vùng chữ, tọa độ, điểm tin cậy, kết quả trước khi đọc lại tiếng Việt, thời gian mỗi trang và số vùng cần xem lại. Điểm tin cậy không phải tỷ lệ chính xác đã được xác minh.
+- Output có phần **Đối chiếu ảnh gốc và sửa chữ từng trang**; bản sửa được tải riêng, không tự ghi đè bản OCR.
+- Markdown giữ xuống dòng theo vùng; PDF tìm kiếm được dùng cùng nội dung vùng với bản Markdown.
+- Cache mới tách theo phiên bản/chế độ. Để xử lý lại kết quả cũ bằng v2, **thêm lại file thành tác vụ mới**, không bấm Tiếp tục tác vụ cũ. Tiếp tục giữ chế độ cũ để bảo toàn công việc đang làm.
+
+Mô hình PP-OCRv6 đi kèm wheel RapidOCR khóa phiên bản; không tải mô hình từ các máy chủ bên ngoài khi nhận dạng. Bộ Tesseract Việt–Anh vẫn cần được cài bằng nút Tải bộ ngôn ngữ.
+
+Xem [kết quả đo trên mẫu 5 trang](BENCHMARK.md). Chế độ Nhanh giảm thời gian trên mẫu; Cân bằng cải thiện các câu Nhật đã đối chiếu nhưng vẫn còn lỗi, đặc biệt dấu tiếng Việt và furigana.
 
 ## Lấy và chạy code
 
@@ -74,9 +87,9 @@ Toàn bộ dữ liệu và mô hình nằm trong `.ocr-local`, đã loại khỏ
 
 Ứng dụng tự chọn số tài liệu chạy đồng thời theo CPU và RAM trống, tính lại trước batch mới nếu không còn tác vụ đang chạy:
 
-- Dự trù 768 MB cho mỗi worker, giữ lại 1 GB RAM và một CPU logic nếu có thể.
+- Dự trù 1 GB cho mỗi worker, giữ lại 1 GB RAM và một CPU logic nếu có thể.
 - Tối thiểu 1, tối đa 8 tài liệu cùng lúc. Tesseract dùng 1 luồng/tài liệu để tránh nhân số luồng quá mức.
-- Mỗi tài liệu là tiến trình riêng; chỉ render một trang tại một thời điểm, thường 300 DPI. Trang quá lớn được hạ DPI để không vượt 40 triệu pixel.
+- Mỗi tài liệu là tiến trình riêng; chỉ render một trang tại một thời điểm, 220 DPI ở chế độ Cân bằng hoặc 200 DPI ở chế độ Nhanh. Trang quá lớn được hạ DPI để không vượt 40 triệu pixel. Tác vụ cũ giữ 300 DPI.
 - Tài liệu có sẵn lớp chữ đủ dài dùng lại chữ; trang scan hoặc chỉ có ít chữ được OCR.
 - Không giữ ảnh raster của cả tài liệu trong RAM. Upload và tải kết quả trên giao diện vẫn có thể dùng RAM theo kích thước file.
 
@@ -84,12 +97,12 @@ Toàn bộ dữ liệu và mô hình nằm trong `.ocr-local`, đã loại khỏ
 
 ## Chất lượng và giới hạn
 
-Chạy được chữ Nhật và tiếng Việt trên cùng trang nhưng không bảo đảm mọi ký tự đúng. Furigana, chữ dọc, nghiêng, mờ, bảng và nhiều cột cần kiểm tra/sửa. Chưa tự tách bảng thành Markdown table, chưa tái dựng nguyên bố cục và chưa xoay/nghiêng ảnh tự động. Không dùng AI để tự sửa đáp án hoặc nội dung giáo trình. PDF có mật khẩu cần bản được mở khóa hợp lệ trước khi nhập.
+Chạy được chữ Nhật và tiếng Việt trên cùng trang nhưng không bảo đảm mọi ký tự đúng. Furigana, chữ dọc, mờ, bảng và nhiều cột cần kiểm tra/sửa. Chế độ Cân bằng sửa phối cảnh từng vùng Latin nhưng chưa làm phẳng trang sách cong hoặc tự xoay ảnh 90/180 độ. Chưa tách bảng thành Markdown table hoặc tái dựng nguyên bố cục; thứ tự dòng giữa nhiều cột vẫn có thể sai. Không dùng mô hình sinh để tự sửa đáp án hoặc bịa lại nội dung giáo trình. PDF có mật khẩu cần bản được mở khóa hợp lệ trước khi nhập.
 
 ## Kiểm tra
 
 ```bat
-.venv-ocr\Scripts\python.exe -m unittest scan_tool.test_scan -v
+.venv-ocr\Scripts\python.exe -m unittest scan_tool.test_scan scan_tool.test_ui scan_tool.test_layout -v
 ```
 
 Các kiểm thử có sử dụng OCR yêu cầu Tesseract và ba bộ ngôn ngữ; runner báo skipped khi thiếu, không tính là đã kiểm chứng OCR. Có kiểm thử fixture 100 trang có lớp chữ, cache tiếp tục, tài liệu lỗi không làm hỏng tài liệu khác và giới hạn song song khi ít RAM. Việc chạy trực tiếp trên Windows vẫn cần xác nhận trên máy đích.

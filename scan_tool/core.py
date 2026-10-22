@@ -80,7 +80,11 @@ def find_tesseract() -> str | None:
     return None
 
 
-def engine_status() -> dict:
+def engine_status(mode="balanced") -> dict:
+    if mode == "balanced":
+        import importlib.util
+        if importlib.util.find_spec("rapidocr") is None or importlib.util.find_spec("onnxruntime") is None:
+            return {"ready": False, "message": "Thiếu bộ OCR mới. Đóng ứng dụng và chạy lại start-ocr-windows.bat để cài."}
     executable = find_tesseract()
     if not executable:
         return {"ready": False, "message": "Chưa tìm thấy Tesseract OCR. Xem hướng dẫn cài đặt bên dưới."}
@@ -121,7 +125,7 @@ def resource_plan() -> dict:
     except (OSError, ValueError):
         pass
     reserve = 1024 ** 3
-    per_document = 768 * 1024 ** 2
+    per_document = 1024 * 1024 ** 2
     workers = max(1, min(8, cpus - 1 if cpus > 1 else 1,
                          max(1, (available - reserve) // per_document)))
     return {"workers": int(workers), "cpu": cpus, "available_gb": round(available / 1024 ** 3, 1),
@@ -193,12 +197,12 @@ class JobManager:
             return False
 
     def create(self, name: str, source: str, *, path: str | None = None, url: str | None = None,
-               searchable: bool = False) -> str:
+               searchable: bool = False, mode: str = "balanced") -> str:
         job_id = uuid.uuid4().hex
         folder = self.store / job_id
         folder.mkdir()
         atomic_json(folder / "job.json", {"id": job_id, "name": name, "source": source,
-                    "input_path": path, "url": url, "searchable": searchable, "created": time.time()})
+                    "input_path": path, "url": url, "searchable": searchable, "mode": mode, "created": time.time()})
         self.start(job_id)
         return job_id
 

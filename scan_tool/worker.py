@@ -59,7 +59,11 @@ def process_document(folder):
         atomic_json(folder / "status.json", status)
 
     try:
-        engine = engine_status()
+        mode = job.get("mode", "legacy")
+        if mode not in {"balanced", "fast", "legacy"}:
+            raise RuntimeError("Chế độ OCR không hợp lệ.")
+        target_dpi = {"balanced": 220, "fast": 200, "legacy": 300}[mode]
+        engine = engine_status(mode)
         if not engine["ready"]:
             raise RuntimeError(engine["message"])
         source = Path(job["input_path"]) if job.get("input_path") else folder / "missing"
@@ -73,7 +77,7 @@ def process_document(folder):
             atomic_json(folder / "job.json", job)
         if (folder / "cancel").exists():
             raise Cancelled()
-        signature = file_digest(source) + "-jpn-vie-eng-300-v1"
+        signature = file_digest(source) + ("-jpn-vie-eng-300-v1" if mode == "legacy" else f"-v2-{mode}-{target_dpi}")
         work = folder / "pages" / signature
         work.mkdir(parents=True, exist_ok=True)
         output = folder / "output"
@@ -91,6 +95,7 @@ def process_document(folder):
                 raise RuntimeError("Tài liệu không có trang.")
             progress(total=total)
             page_info = []
+            layout_engine = None
             # Write partial exports; only publish complete exports after all pages succeed.
             with markdown.with_suffix(".md.part").open("w", encoding="utf-8") as md, \
                     plain.with_suffix(".txt.part").open("w", encoding="utf-8") as txt:
@@ -105,6 +110,8 @@ def process_document(folder):
                     cached = load_json(marker)
                     need_pdf = bool(job.get("searchable"))
                     if not text_path.is_file() or not cached or (need_pdf and not page_pdf.is_file()):
+                        started = time.monotonic()
+                        details = {}
                         progress(page=index, message=f"Đang nhận dạng trang {index + 1}/{total}")
                         # Preserve native text when available; scanned pages use OCR.
                         native = page.get_text("text").strip()
@@ -123,26 +130,39 @@ def process_document(folder):
                                             single.insert_pdf(converted, from_page=index, to_page=index)
                                     single.save(page_pdf)
                         else:
-                            scale = min(300 / 72, (40_000_000 / max(1, page.rect.width * page.rect.height)) ** 0.5)
+                            scale = min(target_dpi / 72, (40_000_000 / max(1, page.rect.width * page.rect.height)) ** 0.5)
                             dpi = round(scale * 72)
                             image = base.with_suffix(".png")
                             pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, alpha=False)
                             pix.save(image)
                             del pix
-                            command = [engine["executable"], str(image), str(base), "-l", "jpn+vie+eng",
-                                       "--dpi", str(dpi), "--psm", "3", "-c", "tessedit_create_txt=1"]
-                            if need_pdf:
-                                command.extend(["-c", "tessedit_create_pdf=1"])
                             try:
-                                run_tesseract(command, folder)
+                                if mode == "balanced":
+                                    from scan_tool.layout_ocr import LayoutOCR
+                                    if layout_engine is None:
+                                        layout_engine = LayoutOCR()
+                                    text, details = layout_engine.read(image, base, engine["executable"],
+                                                                     lambda command: run_tesseract(command, folder))
+                                    text_path.write_text(text, encoding="utf-8")
+                                    method = "layout_jp_vie"
+                                    if need_pdf:
+                                        write_layout_pdf(image, page_pdf, page.rect, details["regions"])
+                                else:
+                                    command = [engine["executable"], str(image), str(base), "-l", "jpn+vie+eng",
+                                               "--dpi", str(dpi), "--psm", "3", "-c", "tessedit_create_txt=1"]
+                                    if need_pdf:
+                                        command.extend(["-c", "tessedit_create_pdf=1"])
+                                    run_tesseract(command, folder)
                                 if not text_path.is_file() or (need_pdf and not page_pdf.is_file()):
                                     raise RuntimeError("Tesseract không tạo đủ file đầu ra. Cài lại bộ ngôn ngữ và thử tiếp tục.")
                             finally:
                                 image.unlink(missing_ok=True)
-                        cached = {"page": index + 1, "method": method}
+                        cached = {"page": index + 1, "method": method, "mode": mode,
+                                  "seconds": round(time.monotonic() - started, 3), **details}
                         atomic_json(marker, cached)
                     text = text_path.read_text(encoding="utf-8").strip()
-                    md.write(f"## Trang {index + 1}\n\n{text}\n\n")
+                    md_text = text.replace("\n", "  \n") if mode == "balanced" and cached["method"] != "native_text" else text
+                    md.write(f"## Trang {index + 1}\n\n{md_text}\n\n")
                     txt.write(("\n\f\n" if index else "") + text + "\n")
                     page_info.append({**cached, "characters": len(text), "empty": not bool(text)})
                     progress(page=index + 1, message=f"Đã nhận dạng {index + 1}/{total} trang")
@@ -169,12 +189,14 @@ def process_document(folder):
             markdown.with_suffix(".md.part").replace(markdown)
             plain.with_suffix(".txt.part").replace(plain)
             atomic_json(metadata, {"input_name": source.name, "pages": page_info,
-                                   "languages": ["jpn", "vie", "eng"], "ai_api_calls": 0})
+                                   "languages": ["jpn", "vie", "eng"], "ai_api_calls": 0, "version": "2.0",
+                                   "mode": mode, "target_dpi": target_dpi})
             files = [markdown.name, plain.name, metadata.name]
             if job.get("searchable"):
                 files.append(stem + ".pdf")
             progress(state="completed", page=total, total=total, message="Hoàn thành",
-                     files=files, empty_pages=sum(item["empty"] for item in page_info))
+                     files=files, empty_pages=sum(item["empty"] for item in page_info),
+                     review_pages=sum(bool(item.get("review_regions")) for item in page_info))
     except Cancelled:
         progress(state="cancelled", message="Đã dừng; các trang OCR xong được giữ để tiếp tục.")
     except Exception as exc:
@@ -183,6 +205,48 @@ def process_document(folder):
         progress(state="failed", message=message)
         return 1
     return 0
+
+
+def write_layout_pdf(image, target, rect, regions):
+    """Use exactly the recognized regions as the invisible selectable text layer."""
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=rect.width, height=rect.height)
+        page.insert_image(page.rect, filename=str(image))
+        pixmap = fitz.Pixmap(str(image))
+        sx, sy = rect.width / pixmap.width, rect.height / pixmap.height
+        del pixmap
+        font = fitz.Font("notos")
+        japanese_font = fitz.Font("japan")
+        font_choices = {}
+        for region in regions:
+            points = region["box"]
+            box = fitz.Rect(min(p[0] for p in points) * sx, min(p[1] for p in points) * sy,
+                            max(p[0] for p in points) * sx, max(p[1] for p in points) * sy)
+            if box.is_empty:
+                continue
+            origin = fitz.Point(box.x0, box.y0 + box.height * .8)
+            writer = fitz.TextWriter(page.rect)
+            # Explicit font runs preserve Japanese punctuation that MuPDF's
+            # automatic fallback can otherwise encode as a null character.
+            runs = []
+            for char in region["text"]:
+                if char not in font_choices:
+                    font_choices[char] = 0 if font.has_glyph(ord(char)) else 1
+                choice = font_choices[char]
+                if runs and runs[-1][0] == choice:
+                    runs[-1][1] += char
+                else:
+                    runs.append([choice, char])
+            position = origin
+            for choice, text in runs:
+                writer.append(position, text, font=font if choice == 0 else japanese_font,
+                              fontsize=max(1, box.height * .8))
+                position = writer.last_point
+            width = writer.text_rect.width
+            if width > 0:
+                writer.write_text(page, render_mode=3, morph=(origin, fitz.Matrix(box.width / width, 1)))
+        pdf.subset_fonts()
+        pdf.save(target, deflate=True)
 
 
 if __name__ == "__main__":
